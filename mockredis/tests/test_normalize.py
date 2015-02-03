@@ -3,7 +3,7 @@ Test redis command normalization.
 """
 from nose.tools import eq_
 
-from mockredis.client import MockRedis
+from mockredis.client import MockRedis, MockStrictRedis
 
 
 def test_normalize_command_name():
@@ -50,7 +50,10 @@ def test_normalize_command_args():
     ]
 
     def _test(strict, command, args, expected):
-        redis = MockRedis(strict=strict)
+        if strict:
+            redis = MockStrictRedis()
+        else:
+            redis = MockRedis()
         eq_(tuple(redis._normalize_command_args(command, *args)), expected)
 
     for strict, command, args, expected in cases:

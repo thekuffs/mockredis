@@ -29,7 +29,7 @@ import os
 
 from nose.plugins import Plugin
 
-from mockredis import MockRedis
+from mockredis import MockRedis, MockStrictRedis
 
 
 class WithRedis(Plugin):
@@ -60,7 +60,7 @@ class WithRedis(Plugin):
             from mockredis.exceptions import RedisError, ResponseError, WatchError
 
             WithRedis.Redis = MockRedis
-            WithRedis.StrictRedis = partial(MockRedis, strict=True)
+            WithRedis.StrictRedis = MockStrictRedis
             WithRedis.ResponseError = ResponseError
             WithRedis.RedisError = RedisError
             WithRedis.WatchError = WatchError

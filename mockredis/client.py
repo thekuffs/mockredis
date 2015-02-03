@@ -32,19 +32,21 @@ class MockRedis(object):
     expiry is NOT supported.
     """
 
+    @classmethod
+    def from_url(cls, *args, **kwargs):
+        '''For API parity with the Redis client library.'''
+        return cls()
+
     def __init__(self,
-                 strict=False,
                  clock=None,
                  load_lua_dependencies=True,
                  blocking_timeout=1000,
                  blocking_sleep_interval=0.01,
                  **kwargs):
-        """
-        Initialize as either StrictRedis or Redis.
-
-        Defaults to non-strict.
-        """
-        self.strict = strict
+        if 'strict' in kwargs:
+            raise DeprecationWarning(("'strict' flag is deprecated, please"
+                                      " use `mockredis.MockStrictRedis` "
+                                      "instead"))
         self.clock = SystemClock() if clock is None else clock
         self.load_lua_dependencies = load_lua_dependencies
         self.blocking_timeout = blocking_timeout
@@ -206,13 +208,11 @@ class MockRedis(object):
         Returns time to live in milliseconds if output_ms is True, else returns seconds.
         """
         key = self._encode(key)
-        if key not in self.redis:
+        if key not in self.redis or key not in self.timeouts:
             # as of redis 2.8, -2 is returned if the key does not exist
-            return long(-2) if self.strict else None
-        if key not in self.timeouts:
             # as of redis 2.8, -1 is returned if the key is persistent
             # redis-py returns None; command docs say -1
-            return long(-1) if self.strict else None
+            return None
 
         time_to_live = get_total_milliseconds(self.timeouts[key] - self.clock.now())
         return long(max(-1, time_to_live))
@@ -337,15 +337,12 @@ class MockRedis(object):
         # for all other cases, return true
         return True
 
-    def setex(self, key, time, value):
+    def setex(self, key, value, time):
         """
         Set the value of ``key`` to ``value`` that expires in ``time``
         seconds. ``time`` can be represented by an integer or a Python
         timedelta object.
         """
-        if not self.strict:
-            # when not strict mode swap value and time args order
-            time, value = value, time
         return self.set(key, value, ex=time)
 
     def psetex(self, key, time, value):
@@ -965,18 +962,13 @@ class MockRedis(object):
     def zadd(self, name, *args, **kwargs):
         zset = self._get_zset(name, "ZADD", create=True)
 
-        pieces = []
 
         # args
         if len(args) % 2 != 0:
             raise RedisError("ZADD requires an equal number of "
                              "values and scores")
-        for i in xrange(len(args) // 2):
-            # interpretation of args order depends on whether Redis
-            # or StrictRedis is used
-            score = args[2 * i + (0 if self.strict else 1)]
-            member = args[2 * i + (1 if self.strict else 0)]
-            pieces.append((member, score))
+        it = iter(args)
+        pieces = list(zip(it, it))
 
         # kwargs
         pieces.extend(kwargs.items())
@@ -1240,7 +1232,7 @@ class MockRedis(object):
         Modifies the command arguments to match the
         strictness of the redis client.
         """
-        if command == 'zadd' and not self.strict and len(args) >= 3:
+        if command == 'zadd' and len(args) >= 3:
             # Reorder score and name
             zadd_args = [x for tup in zip(args[2::2], args[1::2]) for x in tup]
             return [args[0]] + zadd_args
@@ -1411,23 +1403,37 @@ class MockRedis(object):
         return value
 
 
+class MockStrictRedis(MockRedis):
+    def pttl(self, key):
+        '''StrictRedis has explicit return codes for nonexistant or persistent
+        keys'''
+        _key = self._encode(key)
+        if _key not in self.redis:
+            # as of redis 2.8, -2 is returned if the key does not exist
+            return long(-2)
+        if _key not in self.timeouts:
+            # as of redis 2.8, -1 is returned if the key is persistent
+            # redis-py returns None; command docs say -1
+            return long(-1)
+        return super(MockStrictRedis, self).pttl(key)
+
+    def setex(self, key, time, value):
+        '''StrictRedis reverses the order of the arguments'''
+        return super(MockStrictRedis, self).setex(key, value, time)
+
+    def zadd(self, name, *args, **kwargs):
+        '''StrictRedis reverses the order of the arguments'''
+        it = iter(args)
+        new_args = chain.from_iterable((b, a) for (a, b) in zip(it, it))
+        return super(MockStrictRedis, self).zadd(name, *new_args, **kwargs)
+
+    def _normalize_command_args(self, command, *args):
+        '''Skip argument reversal for zadd'''
+        if command == 'zadd':
+            return args
+        return super(MockStrictRedis, self)._normalize_command_args(command,
+                                                                    *args)
+
+
 def get_total_milliseconds(td):
     return int((td.days * 24 * 60 * 60 + td.seconds) * 1000 + td.microseconds / 1000.0)
-
-
-def mock_redis_client(**kwargs):
-    """
-    Mock common.util.redis_client so we
-    can return a MockRedis object
-    instead of a Redis object.
-    """
-    return MockRedis()
-
-
-def mock_strict_redis_client(**kwargs):
-    """
-    Mock common.util.redis_client so we
-    can return a MockRedis object
-    instead of a StrictRedis object.
-    """
-    return MockRedis(strict=True)
