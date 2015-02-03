@@ -1,3 +1,8 @@
+Version ???
+ - Implement strict functionality as a separate class
+ - Add from_url class method to mimic Redis client API
+ - REMOVED: 'strict' flag on MockRedis, please use MockStrictRedis
+
 Version 2.9.0.10
  - Return & store byte strings everywhere (unicode turns into utf-8 by default)
  - Fix *SCAN returning non-long values.

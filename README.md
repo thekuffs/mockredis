@@ -13,16 +13,16 @@ Use pip:
 
 ## Usage
 
-Both `mockredis.mock_redis_client` and `mockredis.mock_strict_redis_client` can be
+Both `mockredis.MockRedis` and `mockredis.MockStrictRedis` can be
 used to patch instances of the *redis client*.
 
 For example, using the [mock][mock] library:
                    
-    @patch('redis.Redis', mock_redis_client)
+    @patch('redis.Redis', MockRedis)
                                
 Or:
                                        
-    @patch('redis.StrictRedis', mock_strict_redis_client)
+    @patch('redis.StrictRedis', MockStrictRedis)
 
 ## Testing
 
